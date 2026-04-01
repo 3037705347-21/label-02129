@@ -360,4 +360,61 @@ export async function getWeather(latitude, longitude) {
   }
 }
 
+// ============================================================================
+// 逆地理编码 API（根据经纬度获取城市名称）
+// ============================================================================
+
+export async function reverseGeocode(latitude, longitude) {
+  if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+    throw new ApiError('逆地理编码失败：无效的坐标参数', ErrorType.PARSE)
+  }
+
+  try {
+    const response = await geoApi.get('/reverse', {
+      params: {
+        latitude,
+        longitude,
+        language: 'zh',
+        format: 'json'
+      }
+    })
+
+    if (response.data && response.data.results && response.data.results.length > 0) {
+      const city = response.data.results[0]
+      return {
+        id: city.id,
+        name: city.name,
+        country: city.country || '',
+        admin1: city.admin1 || '',
+        latitude: city.latitude,
+        longitude: city.longitude,
+        displayName: buildDisplayName(city.name, city.admin1, city.country)
+      }
+    }
+
+    return {
+      id: 'current-location',
+      name: '当前位置',
+      country: '',
+      admin1: '',
+      latitude,
+      longitude,
+      displayName: `当前位置 (${latitude.toFixed(2)}, ${longitude.toFixed(2)})`
+    }
+
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    console.error('[reverseGeocode] 逆地理编码失败:', error)
+    return {
+      id: 'current-location',
+      name: '当前位置',
+      country: '',
+      admin1: '',
+      latitude,
+      longitude,
+      displayName: `当前位置 (${latitude.toFixed(2)}, ${longitude.toFixed(2)})`
+    }
+  }
+}
+
 export { ErrorType, ApiError }
