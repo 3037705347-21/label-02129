@@ -1,5 +1,16 @@
 <template>
   <div class="search-box-wrapper">
+    <div class="location-btn-wrapper">
+      <el-button
+        type="success"
+        :loading="locating"
+        @click="handleLocate"
+        class="location-btn"
+      >
+        <el-icon v-if="!locating"><Position /></el-icon>
+        <span>使用当前位置天气</span>
+      </el-button>
+    </div>
     <div class="search-box">
       <el-autocomplete
         v-model="searchText"
@@ -38,8 +49,8 @@
 
 <script setup>
 import { ref } from 'vue'
-import { Search, Location } from '@element-plus/icons-vue'
-import { searchCity } from '../api/weather'
+import { Search, Location, Position } from '@element-plus/icons-vue'
+import { searchCity, reverseGeocode } from '../api/weather'
 import { useDebounceFn } from '../composables/useDebounce'
 import { searchConfig } from '../config'
 import { ElMessage } from 'element-plus'
@@ -48,6 +59,7 @@ const emit = defineEmits(['select'])
 
 const searchText = ref('')
 const loading = ref(false)
+const locating = ref(false)
 const lastResults = ref([])
 
 // 防抖搜索函数
@@ -110,6 +122,64 @@ const handleSearchClick = async () => {
     loading.value = false
   }
 }
+
+// 获取当前位置
+const handleLocate = () => {
+  if (!navigator.geolocation) {
+    ElMessage.error('您的浏览器不支持定位功能')
+    return
+  }
+
+  locating.value = true
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      try {
+        const { latitude, longitude } = position.coords
+        try {
+          const city = await reverseGeocode(latitude, longitude)
+          ElMessage.success(`已定位到：${city.displayName}`)
+          emit('select', city)
+        } catch {
+          const city = {
+            id: `current-location-${Date.now()}`,
+            name: '当前位置',
+            country: '',
+            admin1: '',
+            latitude,
+            longitude,
+            population: 0,
+            displayName: '当前位置'
+          }
+          ElMessage.success('已获取当前位置天气')
+          emit('select', city)
+        }
+      } finally {
+        locating.value = false
+      }
+    },
+    (error) => {
+      locating.value = false
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          ElMessage.error('定位权限被拒绝，请在浏览器设置中开启定位权限')
+          break
+        case error.POSITION_UNAVAILABLE:
+          ElMessage.error('定位信息不可用')
+          break
+        case error.TIMEOUT:
+          ElMessage.error('定位超时，请重试')
+          break
+        default:
+          ElMessage.error('定位失败，请手动输入城市')
+      }
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000
+    }
+  )
+}
 </script>
 
 <style scoped>
@@ -119,6 +189,35 @@ const handleSearchClick = async () => {
   padding: var(--spacing-6);
   box-shadow: var(--shadow-base);
   border: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.location-btn-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.location-btn {
+  border-radius: var(--radius-full);
+  padding: var(--spacing-2) var(--spacing-6);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  height: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  transition: all var(--transition-base);
+}
+
+.location-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.location-btn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .search-box {
@@ -215,6 +314,11 @@ const handleSearchClick = async () => {
 
   .search-btn {
     width: 100%;
+  }
+
+  .location-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>
