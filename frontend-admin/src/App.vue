@@ -16,6 +16,17 @@
       <!-- 搜索区域 -->
       <section class="search-section">
         <SearchBox @select="handleCitySelect" />
+        <div class="location-button-container">
+          <el-button
+            type="primary"
+            :icon="Location"
+            :loading="locating"
+            @click="getCurrentLocation"
+            class="location-button"
+          >
+            使用当前位置天气
+          </el-button>
+        </div>
       </section>
 
       <!-- 搜索历史区域 -->
@@ -75,6 +86,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Location } from '@element-plus/icons-vue'
 import SearchBox from './components/SearchBox.vue'
 import SearchHistory from './components/SearchHistory.vue'
 import CurrentWeather from './components/CurrentWeather.vue'
@@ -86,6 +98,7 @@ import { searchConfig } from './config'
 
 // 状态
 const loading = ref(false)
+const locating = ref(false)
 const currentCity = ref(null)
 const weatherData = ref(null)
 
@@ -149,6 +162,61 @@ const addToHistory = (city) => {
 
   // 最多保留配置的数量
   searchHistory.value = filtered.slice(0, searchConfig.maxHistoryItems)
+}
+
+// 获取当前位置
+const getCurrentLocation = async () => {
+  if (!navigator.geolocation) {
+    ElMessage.error('您的浏览器不支持地理定位功能')
+    return
+  }
+
+  locating.value = true
+
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        resolve,
+        reject,
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000
+        }
+      )
+    })
+
+    const { latitude, longitude } = position.coords
+
+    // 创建一个临时城市对象，使用坐标作为标识
+    const city = {
+      id: `loc-${Date.now()}`,
+      name: '当前位置',
+      country: '',
+      admin1: '',
+      latitude,
+      longitude,
+      population: 0,
+      displayName: '当前位置'
+    }
+
+    // 获取天气数据
+    await handleCitySelect(city)
+
+    ElMessage.success('已获取当前位置天气')
+  } catch (error) {
+    if (error.code === 1) {
+      ElMessage.error('请允许浏览器访问您的位置信息')
+    } else if (error.code === 2) {
+      ElMessage.error('无法获取位置信息')
+    } else if (error.code === 3) {
+      ElMessage.error('获取位置超时，请重试')
+    } else {
+      ElMessage.error(error.message || '获取当前位置失败')
+    }
+  } finally {
+    locating.value = false
+  }
 }
 </script>
 
@@ -214,6 +282,22 @@ const addToHistory = (city) => {
 .loading-section,
 .weather-section {
   padding: 0;
+}
+
+.search-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.location-button-container {
+  display: flex;
+  justify-content: center;
+}
+
+.location-button {
+  width: 100%;
+  max-width: 300px;
 }
 
 .loading-card {
