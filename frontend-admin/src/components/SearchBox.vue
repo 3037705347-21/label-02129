@@ -33,13 +33,25 @@
         <span>搜索</span>
       </el-button>
     </div>
+    <div class="location-section">
+      <el-button
+        :type="locating ? '' : 'success'"
+        :plain="!locating"
+        :loading="locating"
+        @click="handleLocate"
+        class="locate-btn"
+      >
+        <el-icon v-if="!locating"><Position /></el-icon>
+        <span>{{ locating ? '定位中...' : '使用当前位置天气' }}</span>
+      </el-button>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import { Search, Location } from '@element-plus/icons-vue'
-import { searchCity } from '../api/weather'
+import { Search, Location, Position } from '@element-plus/icons-vue'
+import { searchCity, reverseGeocode } from '../api/weather'
 import { useDebounceFn } from '../composables/useDebounce'
 import { searchConfig } from '../config'
 import { ElMessage } from 'element-plus'
@@ -48,6 +60,7 @@ const emit = defineEmits(['select'])
 
 const searchText = ref('')
 const loading = ref(false)
+const locating = ref(false)
 const lastResults = ref([])
 
 // 防抖搜索函数
@@ -110,6 +123,46 @@ const handleSearchClick = async () => {
     loading.value = false
   }
 }
+
+// 获取当前位置
+const handleLocate = async () => {
+  if (!navigator.geolocation) {
+    ElMessage.error('您的浏览器不支持定位功能')
+    return
+  }
+
+  locating.value = true
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        resolve,
+        reject,
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000
+        }
+      )
+    })
+
+    const { latitude, longitude } = position.coords
+    const city = await reverseGeocode(latitude, longitude)
+    ElMessage.success(`定位成功：${city.displayName}`)
+    emit('select', city)
+  } catch (error) {
+    if (error.code === 1) {
+      ElMessage.error('定位失败：请允许浏览器获取位置权限')
+    } else if (error.code === 2) {
+      ElMessage.error('定位失败：无法获取位置信息')
+    } else if (error.code === 3) {
+      ElMessage.error('定位失败：请求超时，请重试')
+    } else {
+      ElMessage.error('定位失败：' + error.message)
+    }
+  } finally {
+    locating.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -127,6 +180,33 @@ const handleSearchClick = async () => {
   width: 100%;
   max-width: 600px;
   margin: 0 auto;
+}
+
+.location-section {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--spacing-4);
+}
+
+.locate-btn {
+  border-radius: var(--radius-full);
+  padding: var(--spacing-2) var(--spacing-5);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  transition: all var(--transition-base);
+}
+
+.locate-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.locate-btn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .search-input {
@@ -215,6 +295,11 @@ const handleSearchClick = async () => {
 
   .search-btn {
     width: 100%;
+  }
+
+  .locate-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>
